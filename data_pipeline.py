@@ -24,8 +24,7 @@ from tqdm import tqdm
 from rich.console import Console
 from rich.table import Table
 
-import io
-console = Console(file=io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace") if hasattr(sys.stdout, 'buffer') else sys.stdout)
+console = Console()
 
 # ──────────────────────────────────────────────────────────────────
 # Schema Builder — Converts tables.json → CREATE TABLE statements
