@@ -1,7 +1,9 @@
 # ── Core ML ────────────────────────────────────────────────────
+# Install torch stack separately first:
+#   pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cu118
 torch==2.2.2
 torchvision==0.17.2
-torchaudio==0.17.2
+torchaudio==2.2.2
 
 # ── Hugging Face stack ──────────────────────────────────────────
 transformers==4.40.2
