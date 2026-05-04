@@ -1,0 +1,4 @@
+r: 8
+lora_alpha: 16
+training:
+  output_dir: "checkpoints/rank_8"

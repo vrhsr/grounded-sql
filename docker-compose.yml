@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_ADAPTER_PATH=/app/checkpoints/rank_16/final_adapter
+      - BASE_MODEL=mistralai/Mistral-7B-Instruct-v0.2
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./checkpoints:/app/checkpoints
+      - ./dataset:/app/dataset
+      - ./data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:

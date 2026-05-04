@@ -1,0 +1,64 @@
+# ── Python ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Jupyter ─────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── ML / Large files ────────────────────────────────────────────
+# Raw Spider dataset — too large for git (SQLite files, schema.sql files)
+dataset/spider/database/
+dataset/spider/train_spider.json
+dataset/spider/train_others.json
+dataset/spider/train_gold.sql
+
+# Processed JSONL data (regeneratable from data_pipeline.py)
+data/processed/
+
+# Model checkpoints and adapters
+checkpoints/
+*.bin
+*.pt
+*.pth
+*.safetensors
+
+# Quantized models
+*.gguf
+*.ggml
+
+# Retrieval indexes (regeneratable)
+retrieval/indexes/
+
+# ── W&B ────────────────────────────────────────────────────────
+wandb/
+
+# ── Env / secrets ───────────────────────────────────────────────
+.env
+.env.*
+*.key
+
+# ── OS / IDE ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs ────────────────────────────────────────────────────────
+logs/
+*.log

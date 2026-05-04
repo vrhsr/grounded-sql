@@ -1,0 +1,4 @@
+r: 64
+lora_alpha: 128
+training:
+  output_dir: "checkpoints/rank_64"
