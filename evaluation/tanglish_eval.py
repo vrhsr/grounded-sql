@@ -20,6 +20,7 @@ from pathlib import Path
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
+from rich.markup import escape
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from evaluation.executor import SQLExecutionEvaluator
@@ -134,11 +135,11 @@ CREATE TABLE refunds (refund_id INTEGER PRIMARY KEY, order_id INTEGER, product_i
             "latency_en_s": lat_en,
         })
 
-        console.print(f"\n[cyan]Tanglish:[/cyan] {tanglish_q}")
-        console.print(f"[dim]English:[/dim]  {english_q}")
-        console.print(f"[yellow]Predicted (Tamil):[/yellow] {pred_sql_ta[:120]}")
-        console.print(f"[yellow]Predicted (Eng):  [/yellow] {pred_sql_en[:120]}")
-        console.print(f"[dim]Gold:              {gold_sql[:120]}[/dim]")
+        console.print(f"\n[cyan]Tanglish:[/cyan] {escape(tanglish_q)}")
+        console.print(f"[dim]English:[/dim]  {escape(english_q)}")
+        console.print(f"[yellow]Predicted (Tamil):[/yellow] {escape(pred_sql_ta[:120])}")
+        console.print(f"[yellow]Predicted (Eng):  [/yellow] {escape(pred_sql_en[:120])}")
+        console.print(f"[dim]Gold:              {escape(gold_sql[:120])}[/dim]")
 
     return results
 
@@ -151,8 +152,8 @@ def print_tanglish_summary(results: list[dict]) -> None:
 
     for r in results:
         table.add_row(
-            r["tanglish_question"][:50],
-            r["pred_sql_tanglish"][:60] + "...",
+            escape(r["tanglish_question"][:50]),
+            escape(r["pred_sql_tanglish"][:60]) + "...",
             f"{r['latency_ta_s']:.2f}s",
         )
     console.print(table)
