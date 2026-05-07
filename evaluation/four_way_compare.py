@@ -104,11 +104,11 @@ class SQLGenerator:
         parts = [f"[INST] {self.SYSTEM_PROMPT}\n"]
 
         # Inject few-shot examples if provided (RAG)
+        # Keep format simple: just Q→SQL pairs, no schema (avoids token overflow)
         if few_shot_examples:
-            parts.append("Here are some relevant examples:\n")
-            for ex in few_shot_examples[:3]:  # max 3 examples
-                parts.append(f"Schema: {ex['schema'][:300]}...")
-                parts.append(f"Question: {ex['question']}")
+            parts.append("Here are some similar SQL examples to guide your output:\n")
+            for ex in few_shot_examples[:2]:  # max 2 to stay within token budget
+                parts.append(f"Q: {ex['question']}")
                 parts.append(f"SQL: {ex['sql']}\n")
 
         parts.append(f"Database Schema:\n{schema_sql}\n")
@@ -129,7 +129,7 @@ class SQLGenerator:
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=1024,
+            max_length=2048,
         ).to(self.model.device)
 
         t0 = time.perf_counter()
