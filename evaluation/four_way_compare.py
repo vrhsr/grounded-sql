@@ -359,10 +359,14 @@ if __name__ == "__main__":
     if "A" in args.systems:
         result_a = run_system_evaluation("A: Base Model", base_gen, test_samples, evaluator, use_rag=False)
         system_results.append(result_a)
+        save_results(system_results, "evaluation/results")
+        console.print("[green]✓ System A saved[/green]")
 
     if "B" in args.systems:
         result_b = run_system_evaluation("B: RAG Only", base_gen, test_samples, evaluator, rag_retriever=rag, use_rag=True)
         system_results.append(result_b)
+        save_results(system_results, "evaluation/results")
+        console.print("[green]✓ System B saved[/green]")
 
     if "C" in args.systems or "D" in args.systems:
         if not args.finetuned_adapter:
@@ -382,11 +386,12 @@ if __name__ == "__main__":
     if "C" in args.systems:
         result_c = run_system_evaluation("C: Fine-tuned", ft_gen, test_samples, evaluator, use_rag=False)
         system_results.append(result_c)
+        save_results(system_results, "evaluation/results")
+        console.print("[green]✓ System C saved[/green]")
 
     if "D" in args.systems:
         rag_ft = RAGRetriever(train_data_path=os.path.join(d_cfg["processed_dir"], "train.jsonl"))
         result_d = run_system_evaluation("D: Fine-tuned + RAG", ft_gen, test_samples, evaluator, rag_retriever=rag_ft, use_rag=True)
         system_results.append(result_d)
-
     print_comparison_table(system_results)
     save_results(system_results, "evaluation/results")
