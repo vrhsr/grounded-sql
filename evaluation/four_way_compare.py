@@ -368,6 +368,15 @@ if __name__ == "__main__":
         if not args.finetuned_adapter:
             console.print("[red]Error: --finetuned-adapter required for systems C and D[/red]")
             sys.exit(1)
+        # Free VRAM before loading the fine-tuned model
+        if "A" in args.systems or "B" in args.systems:
+            console.print("\n[yellow]Freeing base model from VRAM...[/yellow]")
+            del base_gen
+            if "B" in args.systems:
+                del rag
+            torch.cuda.empty_cache()
+            import gc; gc.collect()
+            console.print("[green]✓ VRAM freed[/green]")
         ft_gen = SQLGenerator(args.finetuned_adapter, use_4bit=True)
 
     if "C" in args.systems:
