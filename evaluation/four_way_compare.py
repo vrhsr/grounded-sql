@@ -42,8 +42,11 @@ class SQLGenerator:
     """Unified SQL generator supporting base and fine-tuned models."""
 
     SYSTEM_PROMPT = (
-        "You are an expert SQL assistant. Given a database schema and a natural language question, "
-        "generate the correct SQL query. Return only the SQL query, no explanations."
+        "You are an expert SQL query generator. "
+        "Given a database schema (as CREATE TABLE statements) and a natural language question, "
+        "write a single syntactically correct SQL query that answers the question. "
+        "Rules: Output ONLY the raw SQL query. No markdown. No explanation. No comments. "
+        "End the query with a semicolon."
     )
 
     def __init__(self, model_path: str, use_4bit: bool = True):
@@ -299,7 +302,7 @@ def run_system_evaluation(
             few_shots = rag_retriever.retrieve(question, schema_sql) if use_rag and rag_retriever else None
             prompts.append(generator.build_prompt(schema_sql, question, few_shots))
             
-        pred_sqls, latency = generator.generate_batch(prompts)
+        pred_sqls, latency = generator.generate_batch(prompts, temperature=0.0)
         
         # Distribute latency equally for stats
         per_query_lat = latency / len(batch_samples)

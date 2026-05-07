@@ -1,0 +1,68 @@
+# ══════════════════════════════════════════════════════════════════
+# training/ablations/rank_64_v2.yaml — Overnight improvement run
+#
+# Key changes vs rank_16 baseline:
+#   1. r=64 — more adapter capacity for complex SQL patterns
+#   2. max_seq_length=1024 — was 512, allows full schemas without truncation
+#   3. lora_alpha=128 — keeps alpha/r=2 ratio
+#   4. output_dir points to checkpoints/rank_64
+# ══════════════════════════════════════════════════════════════════
+
+model:
+  base_model: "mistralai/Mistral-7B-Instruct-v0.2"
+  max_seq_length: 1024              # was 512 — full schema without truncation
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: true
+  bnb_4bit_compute_dtype: "bfloat16"
+
+lora:
+  r: 64                             # was 16 — more adapter capacity
+  lora_alpha: 128                   # alpha/r=2 ratio maintained
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+training:
+  output_dir: "checkpoints/rank_64"
+  num_train_epochs: 3
+  per_device_train_batch_size: 2    # smaller batch — r=64 needs more VRAM
+  gradient_accumulation_steps: 16   # effective batch = 32 (same as before)
+  learning_rate: 1.0e-4             # slightly lower LR for higher rank
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+  max_grad_norm: 0.3
+  fp16: false
+  bf16: true
+  logging_steps: 25
+  eval_steps: 100
+  save_steps: 100
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  dataloader_num_workers: 4
+  remove_unused_columns: false
+  report_to: "wandb"
+
+data:
+  spider_train: "dataset/spider/train_spider.json"
+  spider_others: "dataset/spider/train_others.json"
+  spider_dev: "dataset/spider/dev.json"
+  tables: "dataset/spider/tables.json"
+  databases_dir: "dataset/spider/database"
+  processed_dir: "data/processed"
+  synthetic_ecommerce: "data/raw/synthetic/ecommerce.jsonl"
+  alpaca_mix_ratio: 0.05
+
+wandb:
+  project: "text-to-sql-finetune"
+  entity: null
