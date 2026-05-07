@@ -96,19 +96,18 @@ class SQLGenerator:
         return "\n".join(parts)
 
     @torch.no_grad()
-    def generate(
+    def generate_batch(
         self,
-        schema_sql: str,
-        question: str,
-        few_shot_examples: list[dict] = None,
+        prompts: list[str],
         max_new_tokens: int = 256,
         temperature: float = 0.1,
-    ) -> tuple[str, float]:
-        """Generate SQL. Returns (sql, latency_seconds)."""
-        prompt = self.build_prompt(schema_sql, question, few_shot_examples)
+    ) -> tuple[list[str], float]:
+        """Generate SQL in batches. Returns (list of sqls, total_latency)."""
+        self.tokenizer.padding_side = "left"
         inputs = self.tokenizer(
-            prompt,
+            prompts,
             return_tensors="pt",
+            padding=True,
             truncation=True,
             max_length=512,
         ).to(self.model.device)
@@ -124,10 +123,27 @@ class SQLGenerator:
         )
         latency = time.perf_counter() - t0
 
-        # Decode only the generated tokens (not the prompt)
-        generated = outputs[0][inputs["input_ids"].shape[-1]:]
-        sql = self.tokenizer.decode(generated, skip_special_tokens=True).strip()
-        return sql, latency
+        generated_sqls = []
+        for i, output in enumerate(outputs):
+            gen_tokens = output[inputs["input_ids"].shape[1]:]
+            sql = self.tokenizer.decode(gen_tokens, skip_special_tokens=True).strip()
+            generated_sqls.append(sql)
+            
+        return generated_sqls, latency
+
+    @torch.no_grad()
+    def generate(
+        self,
+        schema_sql: str,
+        question: str,
+        few_shot_examples: list[dict] = None,
+        max_new_tokens: int = 256,
+        temperature: float = 0.1,
+    ) -> tuple[str, float]:
+        """Generate SQL. Returns (sql, latency_seconds)."""
+        prompt = self.build_prompt(schema_sql, question, few_shot_examples)
+        sqls, lat = self.generate_batch([prompt], max_new_tokens, temperature)
+        return sqls[0], lat
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -205,33 +221,42 @@ def run_system_evaluation(
 
     console.print(f"\n[bold blue]━━ System {system_name} ━━[/bold blue]")
 
-    for sample in tqdm(test_samples, desc=f"System {system_name}"):
-        schema_sql = sample.get("prompt", "").split("Database Schema:")[-1].split("Question:")[0].strip()
-        question = sample.get("question", "")
-        gold_sql = sample.get("gold_sql", "")
-        db_id = sample.get("db_id", "")
+    batch_size = 12
+    
+    for i in tqdm(range(0, len(test_samples), batch_size), desc=f"System {system_name}"):
+        batch_samples = test_samples[i:i+batch_size]
+        prompts = []
+        
+        for sample in batch_samples:
+            schema_sql = sample.get("prompt", "").split("Database Schema:")[-1].split("Question:")[0].strip()
+            question = sample.get("question", "")
+            few_shots = rag_retriever.retrieve(question, schema_sql) if use_rag and rag_retriever else None
+            prompts.append(generator.build_prompt(schema_sql, question, few_shots))
+            
+        pred_sqls, latency = generator.generate_batch(prompts)
+        
+        # Distribute latency equally for stats
+        per_query_lat = latency / len(batch_samples)
+        
+        for sample, pred_sql in zip(batch_samples, pred_sqls):
+            question = sample.get("question", "")
+            gold_sql = sample.get("gold_sql", "")
+            db_id = sample.get("db_id", "")
+            
+            latencies.append(per_query_lat)
+            eval_result = evaluator.evaluate(pred_sql, gold_sql, db_id)
+            results.append({
+                "question": question,
+                "db_id": db_id,
+                "pred_sql": pred_sql,
+                "gold_sql": gold_sql,
+                "correct": eval_result.correct,
+                "error_type": eval_result.error_type,
+                "latency_s": per_query_lat,
+            })
 
-        # Retrieve few-shot examples for RAG systems
-        few_shots = None
-        if use_rag and rag_retriever:
-            few_shots = rag_retriever.retrieve(question, schema_sql)
-
-        pred_sql, latency = generator.generate(schema_sql, question, few_shot_examples=few_shots)
-        latencies.append(latency)
-
-        eval_result = evaluator.evaluate(pred_sql, gold_sql, db_id)
-        results.append({
-            "question": question,
-            "db_id": db_id,
-            "pred_sql": pred_sql,
-            "gold_sql": gold_sql,
-            "correct": eval_result.correct,
-            "error_type": eval_result.error_type,
-            "latency_s": latency,
-        })
-
-        if eval_result.error_type:
-            errors[eval_result.error_type] = errors.get(eval_result.error_type, 0) + 1
+            if eval_result.error_type:
+                errors[eval_result.error_type] = errors.get(eval_result.error_type, 0) + 1
 
     n_correct = sum(r["correct"] for r in results)
     n_total = len(results)
