@@ -172,41 +172,38 @@ class SQLGenerator:
 
 class RAGRetriever:
     """
-    Retrieves few-shot examples for a query.
-    Full implementation uses FAISS + BM25 hybrid in retrieval/hybrid_linker.py.
-    This stub loads pre-built index or falls back to random sampling.
+    Retrieves semantically similar few-shot examples using the pre-built
+    FAISS index (retrieval/indexes/faiss/) via HybridSchemaLinker.
     """
 
-    def __init__(self, index_path: Optional[str] = None, train_data_path: str = "data/processed/train.jsonl"):
-        self.examples = []
-        if os.path.exists(train_data_path):
-            with open(train_data_path) as f:
-                for line in f:
-                    if line.strip():
-                        self.examples.append(json.loads(line))
-        console.print(f"[yellow]RAG: Loaded {len(self.examples)} examples for retrieval[/yellow]")
-
-        # Try to load FAISS index
-        self.index = None
-        if index_path and os.path.exists(index_path):
-            try:
-                from retrieval.hybrid_linker import HybridSchemaLinker
-                self.linker = HybridSchemaLinker.load(index_path)
-                console.print("[green]✓ Loaded FAISS index[/green]")
-            except Exception as e:
-                console.print(f"[yellow]FAISS load failed ({e}) — using random retrieval[/yellow]")
+    def __init__(self, index_dir: str = "retrieval/indexes", train_data_path: str = "data/processed/train.jsonl"):
+        self.linker = None
+        try:
+            from retrieval.hybrid_linker import HybridSchemaLinker
+            self.linker = HybridSchemaLinker.load(index_dir)
+            console.print(f"[green]✓ RAG: Loaded FAISS index from {index_dir}[/green]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: FAISS index load failed ({e}). RAG will be disabled.[/yellow]")
 
     def retrieve(self, question: str, schema: str, top_k: int = 3) -> list[dict]:
-        """Retrieve top_k similar examples."""
-        if not self.examples:
+        """Retrieve top_k semantically similar examples from the FAISS index."""
+        if self.linker is None:
             return []
-        # Fallback: random sampling (replace with FAISS in production)
-        import random
-        sampled = random.sample(self.examples, min(top_k, len(self.examples)))
-        return [
-            {"schema": s.get("prompt", ""), "question": s.get("question", ""), "sql": s.get("gold_sql", "")}
-            for s in sampled
-        ]
+        try:
+            results = self.linker.get_few_shot_examples(question, top_k=top_k)
+            # Map FAISS metadata fields → prompt builder format
+            return [
+                {
+                    "schema": r.get("schema_snippet", ""),
+                    "question": r.get("question", ""),
+                    "sql": r.get("gold_sql", ""),
+                }
+                for r in results
+                if r.get("gold_sql")
+            ]
+        except Exception as e:
+            console.print(f"[yellow]Retrieval failed: {e}[/yellow]")
+            return []
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -374,7 +371,7 @@ if __name__ == "__main__":
 
     if "A" in args.systems or "B" in args.systems:
         base_gen = SQLGenerator(BASE_MODEL, use_4bit=True)
-        rag = RAGRetriever(train_data_path=os.path.join(d_cfg["processed_dir"], "train.jsonl"))
+        rag = RAGRetriever(index_dir="retrieval/indexes")
 
     if "A" in args.systems:
         result_a = run_system_evaluation("A: Base Model", base_gen, test_samples, evaluator, use_rag=False)
@@ -410,7 +407,7 @@ if __name__ == "__main__":
         console.print("[green]✓ System C saved[/green]")
 
     if "D" in args.systems:
-        rag_ft = RAGRetriever(train_data_path=os.path.join(d_cfg["processed_dir"], "train.jsonl"))
+        rag_ft = RAGRetriever(index_dir="retrieval/indexes")
         result_d = run_system_evaluation("D: Fine-tuned + RAG", ft_gen, test_samples, evaluator, rag_retriever=rag_ft, use_rag=True)
         system_results.append(result_d)
     print_comparison_table(system_results)
