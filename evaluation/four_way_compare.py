@@ -49,8 +49,22 @@ class SQLGenerator:
     def __init__(self, model_path: str, use_4bit: bool = True):
         from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
         from peft import PeftModel
+        import os
 
         console.print(f"\n[bold]Loading model:[/bold] {model_path}")
+
+        # Detect whether this is a PEFT adapter directory or a full model
+        is_peft = os.path.exists(os.path.join(model_path, "adapter_config.json"))
+
+        if is_peft:
+            # Load the base model name from the adapter config
+            import json
+            with open(os.path.join(model_path, "adapter_config.json")) as f:
+                adapter_cfg = json.load(f)
+            base_model_name = adapter_cfg["base_model_name_or_path"]
+            console.print(f"[dim]PEFT adapter detected — loading base: {base_model_name}[/dim]")
+        else:
+            base_model_name = model_path
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         if self.tokenizer.pad_token is None:
@@ -64,18 +78,24 @@ class SQLGenerator:
                 bnb_4bit_compute_dtype=torch.bfloat16,
             )
             self.model = AutoModelForCausalLM.from_pretrained(
-                model_path,
+                base_model_name,
                 quantization_config=bnb_config,
                 device_map="auto",
                 trust_remote_code=True,
             )
         else:
             self.model = AutoModelForCausalLM.from_pretrained(
-                model_path,
+                base_model_name,
                 device_map="auto",
                 torch_dtype=torch.bfloat16,
                 trust_remote_code=True,
             )
+
+        # Apply LoRA adapter weights on top of the base model
+        if is_peft:
+            self.model = PeftModel.from_pretrained(self.model, model_path)
+            self.model = self.model.merge_and_unload()  # merge for faster inference
+            console.print("[green]✓ LoRA adapter merged[/green]")
 
         self.model.eval()
 
@@ -109,7 +129,7 @@ class SQLGenerator:
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=512,
+            max_length=1024,
         ).to(self.model.device)
 
         t0 = time.perf_counter()
