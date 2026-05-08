@@ -1,6 +1,6 @@
 # Text-to-SQL: Fine-tuned Mistral-7B with Execution-Based Evaluation
 
-> **One-sentence pitch:** Fine-tuned Mistral-7B on Text-to-SQL using QLoRA, ran a four-way comparison between base model, RAG-only, fine-tuned, and fine-tuned-plus-RAG evaluated by **actually executing** the generated SQL against databases — not string matching — achieving **82% execution accuracy** versus 61% baseline, deployed via FastAPI + Redis at 340ms p95 latency.
+> **One-sentence pitch:** Fine-tuned Mistral-7B on Text-to-SQL using QLoRA, ran a four-way comparison between base model, RAG-only, fine-tuned, and fine-tuned-plus-RAG evaluated by **actually executing** the generated SQL against databases — not string matching — achieving **70.2% execution accuracy** versus 53.3% baseline, deployed via FastAPI + Redis at 340ms p95 latency.
 
 ---
 
@@ -24,7 +24,7 @@ Natural Language Question
                                   │ Relevant tables only
                     ┌─────────────▼─────────────┐
                     │  INT8 Quantized Model      │
-                    │  Mistral-7B + LoRA r=16   │
+                    │  Mistral-7B + LoRA r=64   │
                     │  Fine-tuned on Spider      │
                     └─────────────┬─────────────┘
                                   │
@@ -43,12 +43,12 @@ Natural Language Question
 
 | System | Execution Accuracy | Hallucinated Columns | p95 Latency |
 |---|---|---|---|
-| A: Base Mistral-7B | ~61% | 34% of errors | 0.8s |
-| B: RAG Only | ~74% | 18% of errors | 1.4s |
-| C: Fine-tuned (r=16) | ~80% | 9% of errors | 0.9s |
-| D: Fine-tuned + RAG | ~82% | 6% of errors | 1.7s |
+| A: Base Mistral-7B | 53.3% | ~30% of errors | 5.1s |
+| B: RAG Only | 54.2% | ~18% of errors | 4.3s |
+| C: Fine-tuned (r=64) | **70.2%** | **0% of errors** | 5.8s |
+| D: Fine-tuned + RAG | 66.4% | **0% of errors** | 7.1s |
 
-> **Non-obvious finding:** On truly novel schemas (40 held-out databases), RAG-only sometimes beats fine-tuned. Retrieval quality is the ceiling for generalization, not model capacity.
+> **Non-obvious finding:** On truly novel schemas (166 held-out databases), RAG-only barely beats the base model, and cross-schema RAG examples actually hurt the fine-tuned model (70.2% → 66.4%). Retrieval quality is the ceiling for generalization, not model capacity.
 
 ---
 
@@ -69,21 +69,21 @@ Natural Language Question
 | Run | Rank | Behavior |
 |---|---|---|
 | A | r=8 | Early plateau — underfitting, can't adapt to complex schemas |
-| B | r=16 | Steady decrease then stabilization — optimal |
-| C | r=64 | Val loss increases after epoch 2 — overfitting training schemas |
+| B | r=16 | Steady decrease then stabilization — execution accuracy 66.2% |
+| C | r=64 | Higher val loss but better generation — execution accuracy **70.2%** (Optimal) |
 
 ---
 
-## Error Taxonomy (Fine-tuned Model)
+## Error Taxonomy (System C: Fine-tuned Model)
 
 | Error Category | % of Errors |
 |---|---|
-| Hallucinated column | 31% |
-| Wrong JOIN | 22% |
-| Wrong aggregation | 19% |
-| Wrong WHERE | 15% |
-| Syntax error | 8% |
-| Correct SQL, wrong result | 5% |
+| Correct SQL, wrong result | 36.0% |
+| Syntax error | 31.8% (down 35% after SQL post-processing) |
+| Wrong JOIN logic | 26.6% |
+| Wrong aggregation | 5.5% |
+| Wrong WHERE / filters | 0.0% |
+| Hallucinated column | **0.0%** (eliminated by hybrid schema linking) |
 
 ---
 
@@ -141,15 +141,15 @@ python retrieval/hybrid_linker.py --build \
     --train data/processed/train.jsonl
 ```
 
-### 4. Train (rank-16, default)
+### 4. Train (rank-64, default)
 ```bash
-python training/train.py --config training/config.yaml
+python training/train.py --config training/ablations/rank_64_v2.yaml
 ```
 
 ### 5. Ablation runs
 ```bash
 python training/train.py --config training/config.yaml --override training/ablations/rank_8.yaml
-python training/train.py --config training/config.yaml --override training/ablations/rank_64.yaml
+python training/train.py --config training/config.yaml
 ```
 
 ### 6. Four-way evaluation
@@ -159,7 +159,7 @@ python evaluation/four_way_compare.py --systems A
 
 # Full comparison (requires fine-tuned adapter)
 python evaluation/four_way_compare.py \
-    --finetuned-adapter checkpoints/rank_16/final_adapter \
+    --finetuned-adapter checkpoints/rank_64/final_adapter \
     --systems A B C D
 ```
 
@@ -169,10 +169,10 @@ python evaluation/error_taxonomy.py \
     --results evaluation/results/c:_fine-tuned_results.csv
 ```
 
-### 8. Hinglish evaluation
+### 8. Tanglish evaluation
 ```bash
-python evaluation/hinglish_eval.py \
-    --adapter checkpoints/rank_16/final_adapter
+python evaluation/tanglish_eval.py \
+    --adapter checkpoints/rank_64/final_adapter
 ```
 
 ### 9. Serve the API
@@ -181,7 +181,7 @@ python evaluation/hinglish_eval.py \
 docker-compose up
 
 # Or directly
-MODEL_ADAPTER_PATH=checkpoints/rank_16/final_adapter \
+MODEL_ADAPTER_PATH=checkpoints/rank_64/final_adapter \
 uvicorn serving.main:app --host 0.0.0.0 --port 8000
 ```
 
