@@ -1,5 +1,7 @@
 # Text-to-SQL: Fine-tuned Mistral-7B with Execution-Based Evaluation
 
+🔗 **[View Model on Hugging Face](https://huggingface.co/mvrhsr/grounded-sql-mistral-7b)** | 📊 **[View Training Logs on W&B](https://wandb.ai/mvrhsr-/text-to-sql-finetune/runs/kww42yro)**
+
 > **One-sentence pitch:** Fine-tuned Mistral-7B on Text-to-SQL using QLoRA, ran a four-way comparison between base model, RAG-only, fine-tuned, and fine-tuned-plus-RAG evaluated by **actually executing** the generated SQL against databases — not string matching — achieving **70.2% execution accuracy** versus 53.3% baseline, deployed via FastAPI + Redis at 340ms p95 latency.
 
 ---
