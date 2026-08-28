@@ -3,7 +3,7 @@ from huggingface_hub import login, HfApi
 import os
 
 def push_model(token: str, repo_id: str):
-    print("Logging in to Hugging Face...")
+    print("Logging in to Hugging Face...")  
     login(token=token, add_to_git_credential=False)
     
     adapter_path = "checkpoints/rank_64/final_adapter"

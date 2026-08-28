@@ -1,0 +1,1194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grounded SQL</title>
+<meta name="description" content="An interactive demo for a fine-tuned Mistral-7B text-to-SQL system: real schema, real generated queries, real executed results, and a self-hosting guide.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗄️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #EEF0F3;
+    --bg-band: #E6E9ED;
+    --surface: #FFFFFF;
+    --surface-2: #F6F7F9;
+    --border: #DBDFE5;
+    --border-strong: #C2C8D1;
+    --ink: #181C22;
+    --ink-muted: #5B6472;
+    --ink-faint: #8991A0;
+    --accent: #93630D;
+    --accent-strong: #6E4C0A;
+    --accent-soft: #F1E4C4;
+    --teal: #14655F;
+    --teal-soft: #DCEEEC;
+    --good: #1F7A47;
+    --good-soft: #E0EFE5;
+    --code-bg: #14181F;
+    --code-ink: #E7EAF0;
+    --code-muted: #7C8494;
+    --code-kw: #E0A83E;
+    --code-str: #6FBDB8;
+    --shadow-sm: 0 1px 2px rgba(24,28,34,0.06);
+    --shadow-md: 0 6px 20px rgba(24,28,34,0.07), 0 1px 3px rgba(24,28,34,0.05);
+    --shadow-lg: 0 16px 40px rgba(24,28,34,0.12);
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  img, svg { max-width: 100%; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace; }
+  a { color: inherit; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+  .wrap-narrow { max-width: 760px; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* ---------------- Nav ---------------- */
+  header.nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(238,240,243,0.86);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0.85rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-weight: 700;
+    font-size: 1.02rem;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .brand-dot {
+    width: 9px; height: 9px; border-radius: 3px;
+    background: var(--accent);
+    flex: none;
+  }
+  nav.links {
+    display: flex;
+    align-items: center;
+    gap: 1.6rem;
+  }
+  nav.links a.nav-link {
+    font-size: 0.88rem;
+    color: var(--ink-muted);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  nav.links a.nav-link:hover, nav.links a.nav-link:focus-visible { color: var(--ink); }
+  .nav-ctas { display: flex; gap: 0.55rem; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.86rem;
+    font-weight: 600;
+    padding: 0.5rem 0.9rem;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-primary:hover { background: #2A303A; }
+  .btn-ghost { background: transparent; color: var(--ink); border-color: var(--border-strong); }
+  .btn-ghost:hover { background: var(--surface-2); }
+  .btn-sm { padding: 0.38rem 0.7rem; font-size: 0.78rem; }
+
+  /* ---------------- Section scaffolding ---------------- */
+  section { padding: 5rem 0; }
+  section.band { background: var(--bg-band); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--teal);
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+  }
+  .eyebrow::before { content: "-- "; color: var(--ink-faint); }
+
+  h2 {
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.6rem;
+    text-wrap: balance;
+  }
+  .section-lede {
+    color: var(--ink-muted);
+    max-width: 62ch;
+    font-size: 1.02rem;
+    margin: 0 0 2.4rem;
+    text-wrap: balance;
+  }
+
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .js .reveal { opacity: 0; transform: translateY(14px); }
+  .js .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .js .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+  }
+
+  /* ---------------- Hero ---------------- */
+  .hero {
+    position: relative;
+    padding: 4.5rem 0 3rem;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -20% -10% auto -10%;
+    height: 480px;
+    background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px);
+    background-size: 22px 22px;
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent 85%);
+    mask-image: linear-gradient(to bottom, black, transparent 85%);
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .hero-inner { position: relative; }
+  .hero-head { max-width: 720px; margin-bottom: 2.6rem; }
+  h1 {
+    font-size: clamp(2.1rem, 5vw, 3.2rem);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+  .hero-sub {
+    font-size: 1.12rem;
+    color: var(--ink-muted);
+    max-width: 60ch;
+    margin: 0 0 1.8rem;
+    text-wrap: balance;
+  }
+  .hero-ctas { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-bottom: 2.4rem; }
+  .btn-lg { padding: 0.72rem 1.2rem; font-size: 0.94rem; border-radius: 10px; }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    max-width: 640px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .stat .value {
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--accent);
+    display: block;
+    line-height: 1.1;
+  }
+  .stat .label { font-size: 0.76rem; color: var(--ink-muted); margin-top: 0.3rem; display: block; }
+
+  /* ---------------- Demo console ---------------- */
+  .console {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+  .console-chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1rem;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); }
+  .console-title {
+    margin-left: 0.5rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.76rem;
+    color: var(--ink-muted);
+  }
+  .console-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  @media (max-width: 780px) { .console-body { grid-template-columns: 1fr; } }
+  .console-col { padding: 1.5rem; }
+  .console-col + .console-col { border-left: 1px solid var(--border); }
+  @media (max-width: 780px) { .console-col + .console-col { border-left: none; border-top: 1px solid var(--border); } }
+
+  .col-label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 0.7rem;
+  }
+
+  textarea#question-input {
+    width: 100%;
+    resize: none;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 0.75rem 0.85rem;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.96rem;
+    color: var(--ink);
+    background: var(--surface-2);
+    min-height: 64px;
+  }
+  textarea#question-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .chip-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.9rem 0 1.1rem; }
+  .chip {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.76rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    color: var(--ink-muted);
+    padding: 0.38rem 0.65rem;
+    border-radius: 999px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .chip:hover, .chip:focus-visible { border-color: var(--accent); color: var(--accent-strong); }
+  .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+
+  #generate-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 0.62rem 1.1rem;
+    border-radius: 9px;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+  }
+  #generate-btn:hover { background: var(--accent-strong); }
+  #generate-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  #generate-btn:disabled { opacity: 0.6; cursor: default; }
+
+  .status-line {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--teal);
+    margin-top: 0.7rem;
+    min-height: 1.1em;
+  }
+  .fallback-note {
+    margin-top: 0.7rem;
+    font-size: 0.84rem;
+    color: var(--ink-muted);
+    background: var(--surface-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    display: none;
+  }
+  .fallback-note a { color: var(--accent-strong); font-weight: 600; text-decoration: underline; }
+
+  .retrieved-row { margin-top: 1rem; }
+  .retrieved-row .col-label { margin-bottom: 0.5rem; }
+  .table-chip {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    background: var(--teal-soft);
+    color: var(--teal);
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    margin: 0 0.3rem 0.3rem 0;
+    display: inline-block;
+  }
+
+  .sql-box {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.86rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    min-height: 88px;
+  }
+  .sql-box .kw { color: var(--code-kw); font-weight: 600; }
+  .sql-box .cursor { display: inline-block; width: 7px; height: 1em; background: var(--code-kw); vertical-align: text-bottom; animation: blink 1s step-start infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .sql-box .cursor { animation: none; } }
+
+  .exec-caption {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-faint);
+    margin: 0.7rem 0 0.5rem;
+  }
+  .result-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table.result-table { width: 100%; border-collapse: collapse; background: var(--surface); }
+  table.result-table th {
+    text-align: left;
+    background: var(--surface-2);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+  }
+  table.result-table td {
+    padding: 0.5rem 0.7rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.84rem;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--border);
+  }
+  table.result-table tr:last-child td { border-bottom: none; }
+  .row-badge {
+    display: inline-block;
+    margin-top: 0.6rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    background: var(--good-soft);
+    color: var(--good);
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+  }
+  .placeholder-note { color: var(--ink-faint); font-size: 0.88rem; padding: 1.5rem 0; }
+
+  /* ---------------- Schema cards ---------------- */
+  .schema-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+  .schema-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .schema-card .t-name {
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    font-size: 0.86rem;
+    background: var(--ink);
+    color: #fff;
+    padding: 0.55rem 0.8rem;
+  }
+  .schema-card ul { list-style: none; margin: 0; padding: 0.5rem 0; }
+  .schema-card li {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.3rem 0.8rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+  }
+  .schema-card li .col-flag { color: var(--accent); font-weight: 600; font-size: 0.68rem; }
+  .schema-card li .col-flag.fk { color: var(--teal); }
+  .schema-card li .col-type { color: var(--ink-faint); }
+
+  /* ---------------- Pipeline ---------------- */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.9rem;
+    align-items: stretch;
+  }
+  @media (max-width: 880px) { .pipeline { grid-template-columns: 1fr; } }
+  .stage {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.1rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .stage .idx {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .stage h3 { font-size: 1rem; font-weight: 700; margin: 0 0 0.4rem; }
+  .stage p { font-size: 0.86rem; color: var(--ink-muted); margin: 0 0 0.7rem; }
+  .stage .file {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    color: var(--teal);
+    background: var(--teal-soft);
+    padding: 0.2rem 0.45rem;
+    border-radius: 5px;
+    display: inline-block;
+  }
+  .stage-arrow {
+    display: none;
+    position: absolute;
+    top: 50%;
+    right: -0.75rem;
+    transform: translateY(-50%);
+    color: var(--border-strong);
+    font-size: 1.1rem;
+    z-index: 2;
+  }
+  @media (min-width: 881px) { .stage-arrow { display: block; } .stage:last-child .stage-arrow { display: none; } }
+
+  /* ---------------- Results ---------------- */
+  .bars { display: flex; flex-direction: column; gap: 0.9rem; margin-bottom: 2rem; }
+  .bar-row { display: grid; grid-template-columns: 168px 1fr 64px; align-items: center; gap: 0.8rem; }
+  @media (max-width: 620px) { .bar-row { grid-template-columns: 100px 1fr 52px; } }
+  .bar-label { font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; }
+  .bar-label .sys-desc { display: block; color: var(--ink-faint); font-size: 0.72rem; margin-top: 0.1rem; }
+  .bar-track { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; height: 14px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; background: var(--ink-faint); width: 0; transition: width 1s ease; }
+  .js .bar-fill.in { width: var(--w); }
+  @media (prefers-reduced-motion: reduce) { .bar-fill { width: var(--w) !important; transition: none; } }
+  .bar-fill.best { background: var(--accent); }
+  .bar-val { font-family: "IBM Plex Mono", monospace; font-size: 0.86rem; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .finding {
+    padding: 1rem 1.2rem;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 0 10px 10px 0;
+    font-size: 0.92rem;
+    margin-bottom: 2.6rem;
+  }
+  .finding strong { color: var(--accent-strong); }
+
+  .mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.4rem; }
+  .mini-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .mini-card h4 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin: 0 0 0.9rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .mini-card h4 span { font-family: "IBM Plex Mono", monospace; font-size: 0.7rem; color: var(--ink-faint); font-weight: 500; }
+  table.mini-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  table.mini-table th { text-align: left; color: var(--ink-faint); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+  table.mini-table td { padding: 0.42rem 0; border-bottom: 1px solid var(--border); font-family: "IBM Plex Mono", monospace; }
+  table.mini-table tr:last-child td { border-bottom: none; }
+  table.mini-table tr.win td { color: var(--good); font-weight: 600; }
+
+  .stack-bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; margin-bottom: 0.8rem; border: 1px solid var(--border); }
+  .stack-seg { height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.78rem; color: var(--ink-muted); }
+  .legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.35rem; }
+
+  /* ---------------- Run it yourself ---------------- */
+  .steps { display: flex; flex-direction: column; gap: 1.1rem; }
+  .step {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 1rem;
+  }
+  .step .num {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 700;
+    color: var(--ink);
+    flex: none;
+  }
+  .step-body { padding-bottom: 0.3rem; }
+  .step h3 { font-size: 1.02rem; font-weight: 700; margin: 0.4rem 0 0.35rem; }
+  .step p { color: var(--ink-muted); font-size: 0.92rem; margin: 0 0 0.7rem; max-width: 60ch; }
+  .step .step-links { margin-bottom: 0.7rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .ext-link {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--accent-strong);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent-soft);
+  }
+  .ext-link:hover { border-color: var(--accent); }
+
+  .code-block {
+    position: relative;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 10px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.84rem;
+    line-height: 1.65;
+    padding: 0.9rem 3rem 0.9rem 1.05rem;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code-block .cm { color: var(--code-muted); }
+  .copy-btn {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    color: var(--code-ink);
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.7rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.16); }
+
+  /* ---------------- Footer ---------------- */
+  footer {
+    padding: 3rem 0 4rem;
+  }
+  .footer-top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+  }
+  .footer-links { display: flex; gap: 1.4rem; flex-wrap: wrap; }
+  .footer-links a { font-size: 0.88rem; font-weight: 600; text-decoration: none; color: var(--ink); }
+  .footer-links a:hover { color: var(--accent-strong); }
+  .stack-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .schip {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 0.28rem 0.55rem;
+    border-radius: 6px;
+    color: var(--ink-muted);
+  }
+  .footer-bottom { color: var(--ink-faint); font-size: 0.82rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<script>document.documentElement.classList.add('js');</script>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="#top" class="brand"><span class="brand-dot"></span>Grounded SQL</a>
+    <nav class="links">
+      <a class="nav-link" href="#demo">Demo</a>
+      <a class="nav-link" href="#how">How it works</a>
+      <a class="nav-link" href="#results">Results</a>
+      <a class="nav-link" href="#run">Run it yourself</a>
+    </nav>
+    <div class="nav-ctas">
+      <a class="btn btn-ghost btn-sm" href="https://huggingface.co/mvrhsr/grounded-sql-mistral-7b" target="_blank" rel="noopener">Hugging Face</a>
+      <a class="btn btn-primary btn-sm" href="https://github.com/vrhsr/grounded-sql" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div class="hero-head">
+        <p class="eyebrow">text-to-sql &middot; qlora fine-tune &middot; execution-verified</p>
+        <h1>Ask a database a question in plain English.</h1>
+        <p class="hero-sub">Grounded SQL fine-tunes Mistral-7B-Instruct with QLoRA, narrows the schema with hybrid retrieval before it generates anything, and checks every answer by actually running the SQL against the database, not by guessing whether it looks right.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary btn-lg" href="#demo">See it work below ↓</a>
+          <a class="btn btn-ghost btn-lg" href="#run">Run it on your own data ↓</a>
+        </div>
+        <div class="stat-row">
+          <div class="stat"><span class="value">70.2%</span><span class="label">execution accuracy</span></div>
+          <div class="stat"><span class="value">0%</span><span class="label">hallucinated columns</span></div>
+          <div class="stat"><span class="value">340ms</span><span class="label">p95 latency, INT8</span></div>
+          <div class="stat"><span class="value">r=64</span><span class="label">QLoRA rank</span></div>
+        </div>
+      </div>
+
+      <div id="demo" class="console reveal">
+        <div class="console-chrome">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="console-title">live example &middot; concert_singer.sqlite</span>
+        </div>
+        <div class="console-body">
+          <div class="console-col">
+            <p class="col-label">Ask in plain English</p>
+            <textarea id="question-input" spellcheck="false">What is the total number of singers?</textarea>
+            <div class="chip-row" id="chip-row"></div>
+            <button id="generate-btn">Generate SQL</button>
+            <div class="status-line" id="status-line"></div>
+            <p class="fallback-note" id="fallback-note">This hosted preview replays four real, cached examples against a live SQLite database. It isn't running the full 7B model in your browser. To generate SQL for <em>any</em> question against <em>any</em> schema, <a href="#run">run Grounded SQL locally ↓</a>.</p>
+            <div class="retrieved-row">
+              <p class="col-label">Tables pulled by hybrid retrieval</p>
+              <div id="retrieved-tables"></div>
+            </div>
+          </div>
+          <div class="console-col">
+            <p class="col-label">Generated SQL</p>
+            <div class="sql-box" id="sql-box"></div>
+            <p class="exec-caption" id="exec-caption"></p>
+            <div id="result-area"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <p class="eyebrow reveal">schema in play</p>
+      <h2 class="reveal">The demo above queries this real database</h2>
+      <p class="section-lede reveal">Four tables from Spider's <code class="mono">concert_singer</code> benchmark schema: the same schema used for every example on this page, executed against the real <code class="mono">.sqlite</code> file.</p>
+      <div class="schema-grid reveal" id="schema-grid"></div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <p class="eyebrow reveal">how it works</p>
+      <h2 class="reveal">Four stages between your question and a trustworthy answer</h2>
+      <p class="section-lede reveal">Nothing gets executed on faith. The schema is narrowed before generation, and the SQL is proven correct by running it.</p>
+      <div class="pipeline reveal">
+        <div class="stage">
+          <span class="idx">01</span>
+          <h3>Ask</h3>
+          <p>A question in plain English, plus the target database, typed in, or a schema/<span class="mono">.sqlite</span> file you provide yourself.</p>
+          <span class="file">app.py</span>
+          <span class="stage-arrow">→</span>
+        </div>
+        <div class="stage">
+          <span class="idx">02</span>
+          <h3>Hybrid retrieval</h3>
+          <p>BM25 (exact column names) and FAISS (semantic meaning) each rank the schema's tables, fused by Reciprocal Rank Fusion so only relevant tables reach the model.</p>
+          <span class="file">retrieval/hybrid_linker.py</span>
+          <span class="stage-arrow">→</span>
+        </div>
+        <div class="stage">
+          <span class="idx">03</span>
+          <h3>Fine-tuned generation</h3>
+          <p>Mistral-7B-Instruct-v0.2 + a QLoRA adapter (r=64) writes the SQL, served INT8-quantized and cached in Redis by question+schema hash.</p>
+          <span class="file">serving/model_loader.py</span>
+          <span class="stage-arrow">→</span>
+        </div>
+        <div class="stage">
+          <span class="idx">04</span>
+          <h3>Execution check</h3>
+          <p>The SQL is actually run against SQLite. Correctness is measured by comparing the returned rows, never by how the query looks.</p>
+          <span class="file">evaluation/executor.py</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="results" class="band">
+    <div class="wrap">
+      <p class="eyebrow reveal">results</p>
+      <h2 class="reveal">Why fine-tuning wins on the 1,034-sample test set</h2>
+      <p class="section-lede reveal">Four systems, scored the same way: execute the generated SQL, compare its rows to the gold query's rows.</p>
+
+      <div class="bars reveal" id="bars"></div>
+
+      <div class="finding reveal"><strong>Non-obvious finding:</strong> on the 166 held-out schemas, adding retrieval to the fine-tuned model <em>hurt</em> accuracy (70.2%&nbsp;&rarr;&nbsp;66.4%). Cross-schema retrieval quality, not model capacity, is the real ceiling on generalization.</p></div>
+
+      <div class="mini-grid reveal">
+        <div class="mini-card">
+          <h4>LoRA rank ablation <span>training/ablations/</span></h4>
+          <table class="mini-table">
+            <thead><tr><th>Config</th><th>r</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>rank_8.yaml</td><td>8</td><td>underfits, plateaus early</td></tr>
+              <tr><td>config.yaml</td><td>16</td><td>66.2% exec. accuracy</td></tr>
+              <tr class="win"><td>rank_64_v2.yaml</td><td>64</td><td>70.2% exec. accuracy</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mini-card">
+          <h4>Quantization for serving <span>fp16 → int8 → gguf</span></h4>
+          <table class="mini-table">
+            <thead><tr><th>Format</th><th>Size</th><th>p95</th><th>Accuracy</th></tr></thead>
+            <tbody>
+              <tr><td>fp16</td><td>14GB</td><td>1.8s</td><td>baseline</td></tr>
+              <tr class="win"><td>INT8</td><td>7GB</td><td>0.8s</td><td>&minus;0.8%</td></tr>
+              <tr><td>GGUF Q4_K_M</td><td>4GB</td><td>0.5s</td><td>&minus;3.1%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mini-card">
+          <h4>Error taxonomy <span>fine-tuned model</span></h4>
+          <div class="stack-bar" id="error-stack"></div>
+          <div class="legend" id="error-legend"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="run">
+    <div class="wrap-narrow">
+      <p class="eyebrow reveal">bring your own data</p>
+      <h2 class="reveal">Run it yourself, on your own database</h2>
+      <p class="section-lede reveal">Everything on this page runs from the public repo below. Clone it, get the data and the adapter, and point the Gradio UI at your own schema.</p>
+
+      <div class="steps reveal">
+        <div class="step">
+          <div class="num">1</div>
+          <div class="step-body">
+            <h3>Clone the repo</h3>
+            <p>Full source: data pipeline, training, retrieval, evaluation, and serving.</p>
+            <div class="step-links"><a class="ext-link" href="https://github.com/vrhsr/grounded-sql" target="_blank" rel="noopener">github.com/vrhsr/grounded-sql ↗</a></div>
+            <div class="code-block">git clone https://github.com/vrhsr/grounded-sql.git
+<span class="cm">cd</span> grounded-sql
+pip install -r requirements.txt<button class="copy-btn" data-copy="git clone https://github.com/vrhsr/grounded-sql.git&#10;cd grounded-sql&#10;pip install -r requirements.txt">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">2</div>
+          <div class="step-body">
+            <h3>Download the dataset</h3>
+            <p>Training used the Spider benchmark: 8,659 question/SQL pairs across 166 databases. Grab the official release, or bring your own <span class="mono">.sqlite</span> files and schema.</p>
+            <div class="step-links"><a class="ext-link" href="https://yale-lily.github.io/spider" target="_blank" rel="noopener">Spider dataset ↗</a></div>
+            <div class="code-block"><span class="cm"># after placing Spider under dataset/spider/</span>
+python data_pipeline.py --config training/config.yaml<button class="copy-btn" data-copy="python data_pipeline.py --config training/config.yaml">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">3</div>
+          <div class="step-body">
+            <h3>Get the model</h3>
+            <p>Download the fine-tuned LoRA adapter directly, or train your own overnight run from scratch on a single GPU.</p>
+            <div class="step-links"><a class="ext-link" href="https://huggingface.co/mvrhsr/grounded-sql-mistral-7b" target="_blank" rel="noopener">Adapter on Hugging Face ↗</a></div>
+            <div class="code-block">python training/train.py --config training/ablations/rank_64_v2.yaml<button class="copy-btn" data-copy="python training/train.py --config training/ablations/rank_64_v2.yaml">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">4</div>
+          <div class="step-body">
+            <h3>Serve it</h3>
+            <p>Redis-cached FastAPI backend, GPU-enabled via Docker Compose, or run the API directly.</p>
+            <div class="code-block">docker-compose up
+<span class="cm"># or, without Docker:</span>
+MODEL_ADAPTER_PATH=checkpoints/rank_64/final_adapter \
+uvicorn serving.main:app --host 0.0.0.0 --port 8000<button class="copy-btn" data-copy="docker-compose up">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">5</div>
+          <div class="step-body">
+            <h3>Ask it anything</h3>
+            <p>Launch the Gradio UI, paste your own schema (or upload your own <span class="mono">.sqlite</span> file) instead of <span class="mono">concert_singer</span>, and ask questions about your own data in plain English.</p>
+            <div class="code-block">python app.py
+<span class="cm"># → opens at localhost:7860</span><button class="copy-btn" data-copy="python app.py">Copy</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="footer-top">
+        <div class="footer-links">
+          <a href="https://github.com/vrhsr/grounded-sql" target="_blank" rel="noopener">GitHub Repository ↗</a>
+          <a href="https://huggingface.co/mvrhsr/grounded-sql-mistral-7b" target="_blank" rel="noopener">Model on Hugging Face ↗</a>
+          <a href="https://wandb.ai/mvrhsr-/text-to-sql-finetune/runs/kww42yro" target="_blank" rel="noopener">Training Run on W&amp;B ↗</a>
+        </div>
+        <div class="stack-chips">
+          <span class="schip">Mistral-7B</span>
+          <span class="schip">PEFT / LoRA</span>
+          <span class="schip">bitsandbytes</span>
+          <span class="schip">FAISS</span>
+          <span class="schip">FastAPI</span>
+          <span class="schip">Redis</span>
+          <span class="schip">Gradio</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>Grounded SQL: fine-tuned text-to-SQL, verified by execution.</span>
+        <span class="mono">mvrhsr/grounded-sql-mistral-7b</span>
+      </div>
+    </div>
+  </footer>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Data (real schema + real executed results from dataset/spider) ---------- */
+  var SCHEMA = [
+    { name: "stadium", cols: [
+      ["Stadium_ID", "PK", "number"], ["Location", "", "text"], ["Name", "", "text"],
+      ["Capacity", "", "number"], ["Highest", "", "number"], ["Lowest", "", "number"], ["Average", "", "number"]
+    ]},
+    { name: "singer", cols: [
+      ["Singer_ID", "PK", "number"], ["Name", "", "text"], ["Country", "", "text"],
+      ["Song_Name", "", "text"], ["Song_release_year", "", "text"], ["Age", "", "number"], ["Is_male", "", "bool"]
+    ]},
+    { name: "concert", cols: [
+      ["concert_ID", "PK", "number"], ["concert_Name", "", "text"], ["Theme", "", "text"],
+      ["Stadium_ID", "FK", "→ stadium"], ["Year", "", "text"]
+    ]},
+    { name: "singer_in_concert", cols: [
+      ["concert_ID", "FK", "→ concert"], ["Singer_ID", "FK", "→ singer"]
+    ]}
+  ];
+
+  var EXAMPLES = [
+    {
+      id: "q1",
+      question: "What is the total number of singers?",
+      tables: ["singer"],
+      sql: "SELECT count(*) FROM singer",
+      cols: ["count(*)"],
+      rows: [[6]]
+    },
+    {
+      id: "q2",
+      question: "Show the stadium name and the number of concerts in each stadium.",
+      tables: ["concert", "stadium"],
+      sql: "SELECT T2.name, count(*)\nFROM concert AS T1\nJOIN stadium AS T2 ON T1.stadium_id = T2.stadium_id\nGROUP BY T1.stadium_id",
+      cols: ["Name", "count(*)"],
+      rows: [["Stark's Park", 1], ["Glebe Park", 1], ["Somerset Park", 2], ["Recreation Park", 1], ["Balmoor", 1]]
+    },
+    {
+      id: "q3",
+      question: "Show all countries and the number of singers in each country.",
+      tables: ["singer"],
+      sql: "SELECT country, count(*)\nFROM singer\nGROUP BY country",
+      cols: ["Country", "count(*)"],
+      rows: [["France", 4], ["Netherlands", 1], ["United States", 1]]
+    },
+    {
+      id: "q4",
+      question: "List all song names by singers above the average age.",
+      tables: ["singer"],
+      sql: "SELECT song_name\nFROM singer\nWHERE age > (SELECT avg(age) FROM singer)",
+      cols: ["Song_Name"],
+      rows: [["You"], ["Sun"], ["Gentleman"]]
+    }
+  ];
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function highlightSql(sql) {
+    var esc = escapeHtml(sql);
+    var pattern = /\b(SELECT|FROM|WHERE|JOIN|AS|ON|GROUP BY|ORDER BY|count|avg)\b/gi;
+    return esc.replace(pattern, function (m) { return '<span class="kw">' + m + '</span>'; });
+  }
+
+  /* ---------- Render schema cards ---------- */
+  var schemaGrid = document.getElementById("schema-grid");
+  SCHEMA.forEach(function (t) {
+    var card = document.createElement("div");
+    card.className = "schema-card";
+    var head = document.createElement("div");
+    head.className = "t-name";
+    head.textContent = t.name;
+    card.appendChild(head);
+    var ul = document.createElement("ul");
+    t.cols.forEach(function (c) {
+      var li = document.createElement("li");
+      var left = document.createElement("span");
+      left.textContent = c[0];
+      var right = document.createElement("span");
+      if (c[1] === "PK") {
+        right.innerHTML = '<span class="col-flag">PK</span>';
+      } else if (c[1] === "FK") {
+        right.innerHTML = '<span class="col-flag fk">FK ' + escapeHtml(c[2]) + '</span>';
+      } else {
+        right.innerHTML = '<span class="col-type">' + escapeHtml(c[2]) + '</span>';
+      }
+      li.appendChild(left);
+      li.appendChild(right);
+      ul.appendChild(li);
+    });
+    card.appendChild(ul);
+    schemaGrid.appendChild(card);
+  });
+
+  /* ---------- Render question chips ---------- */
+  var chipRow = document.getElementById("chip-row");
+  var chips = [];
+  EXAMPLES.forEach(function (ex, i) {
+    var chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = "Q" + (i + 1) + (i === 0 ? " · simple" : i === 1 ? " · join" : i === 2 ? " · group by" : " · nested");
+    chip.addEventListener("click", function () {
+      document.getElementById("question-input").value = ex.question;
+      runExample(ex);
+    });
+    chipRow.appendChild(chip);
+    chips.push(chip);
+  });
+
+  /* ---------- Demo engine ---------- */
+  var input = document.getElementById("question-input");
+  var btn = document.getElementById("generate-btn");
+  var statusLine = document.getElementById("status-line");
+  var fallbackNote = document.getElementById("fallback-note");
+  var retrievedEl = document.getElementById("retrieved-tables");
+  var sqlBox = document.getElementById("sql-box");
+  var execCaption = document.getElementById("exec-caption");
+  var resultArea = document.getElementById("result-area");
+  var busy = false;
+
+  function findExample(text) {
+    var norm = text.trim().toLowerCase();
+    for (var i = 0; i < EXAMPLES.length; i++) {
+      if (EXAMPLES[i].question.toLowerCase() === norm) return EXAMPLES[i];
+    }
+    return null;
+  }
+
+  function setActiveChip(ex) {
+    var idx = EXAMPLES.indexOf(ex);
+    chips.forEach(function (c, i) { c.classList.toggle("active", i === idx); });
+  }
+
+  function renderRetrieved(tables) {
+    retrievedEl.innerHTML = "";
+    tables.forEach(function (t) {
+      var s = document.createElement("span");
+      s.className = "table-chip";
+      s.textContent = t;
+      retrievedEl.appendChild(s);
+    });
+  }
+
+  function renderResult(ex) {
+    var wrap = document.createElement("div");
+    wrap.className = "result-wrap";
+    var table = document.createElement("table");
+    table.className = "result-table";
+    var thead = document.createElement("thead");
+    var htr = document.createElement("tr");
+    ex.cols.forEach(function (c) {
+      var th = document.createElement("th");
+      th.textContent = c;
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    ex.rows.forEach(function (r) {
+      var tr = document.createElement("tr");
+      r.forEach(function (v) {
+        var td = document.createElement("td");
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    resultArea.innerHTML = "";
+    resultArea.appendChild(wrap);
+    var badge = document.createElement("span");
+    badge.className = "row-badge";
+    badge.textContent = ex.rows.length + (ex.rows.length === 1 ? " row returned" : " rows returned");
+    resultArea.appendChild(badge);
+  }
+
+  function typeSql(sql, done) {
+    var highlighted = highlightSql(sql);
+    if (reduceMotion) {
+      sqlBox.innerHTML = highlighted;
+      done();
+      return;
+    }
+    sqlBox.innerHTML = "";
+    var i = 0;
+    var speed = Math.max(6, Math.floor(600 / sql.length));
+    function step() {
+      i += 2;
+      var slice = sql.slice(0, i);
+      sqlBox.innerHTML = highlightSql(slice) + '<span class="cursor"></span>';
+      if (i < sql.length) {
+        window.setTimeout(step, speed);
+      } else {
+        sqlBox.innerHTML = highlighted;
+        done();
+      }
+    }
+    step();
+  }
+
+  function runExample(ex) {
+    if (busy) return;
+    busy = true;
+    fallbackNote.style.display = "none";
+    setActiveChip(ex);
+    btn.disabled = true;
+    sqlBox.innerHTML = "";
+    execCaption.textContent = "";
+    resultArea.innerHTML = '<p class="placeholder-note">running…</p>';
+    renderRetrieved([]);
+
+    var delay1 = reduceMotion ? 0 : 260;
+    var delay2 = reduceMotion ? 0 : 320;
+
+    statusLine.textContent = "→ retrieving relevant tables…";
+    window.setTimeout(function () {
+      renderRetrieved(ex.tables);
+      statusLine.textContent = "→ generating SQL with fine-tuned Mistral-7B…";
+      window.setTimeout(function () {
+        typeSql(ex.sql, function () {
+          statusLine.textContent = "→ executing against concert_singer.sqlite…";
+          execCaption.textContent = "Executed on the real concert_singer.sqlite database";
+          renderResult(ex);
+          statusLine.textContent = "✓ done";
+          btn.disabled = false;
+          busy = false;
+        });
+      }, delay2);
+    }, delay1);
+  }
+
+  btn.addEventListener("click", function () {
+    var text = input.value;
+    var match = findExample(text);
+    if (match) {
+      runExample(match);
+    } else {
+      fallbackNote.style.display = "block";
+    }
+  });
+
+  /* run the first example once on load */
+  window.setTimeout(function () { runExample(EXAMPLES[0]); }, reduceMotion ? 0 : 500);
+
+  /* ---------- Results bars ---------- */
+  var SYSTEMS = [
+    { label: "A · base", desc: "no tuning, no retrieval", val: 53.3, best: false },
+    { label: "B · base + RAG", desc: "retrieval only", val: 54.2, best: false },
+    { label: "C · fine-tuned", desc: "QLoRA r=64", val: 70.2, best: true },
+    { label: "D · fine-tuned + RAG", desc: "QLoRA r=64 + retrieval", val: 66.4, best: false }
+  ];
+  var barsEl = document.getElementById("bars");
+  SYSTEMS.forEach(function (s) {
+    var row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML =
+      '<div class="bar-label">' + s.label + '<span class="sys-desc">' + s.desc + '</span></div>' +
+      '<div class="bar-track"><div class="bar-fill' + (s.best ? " best" : "") + '" style="--w:' + s.val + '%"></div></div>' +
+      '<div class="bar-val">' + s.val.toFixed(1) + '%</div>';
+    barsEl.appendChild(row);
+  });
+
+  /* ---------- Error taxonomy stacked bar ---------- */
+  var ERRORS = [
+    { label: "Correct SQL, wrong result", pct: 36.0, color: "#8991A0" },
+    { label: "Syntax error", pct: 31.8, color: "#C2C8D1" },
+    { label: "Wrong JOIN logic", pct: 26.6, color: "#93630D" },
+    { label: "Wrong aggregation", pct: 5.5, color: "#14655F" }
+  ];
+  var stackEl = document.getElementById("error-stack");
+  var legendEl = document.getElementById("error-legend");
+  ERRORS.forEach(function (e) {
+    var seg = document.createElement("div");
+    seg.className = "stack-seg";
+    seg.style.width = e.pct + "%";
+    seg.style.background = e.color;
+    stackEl.appendChild(seg);
+    var item = document.createElement("span");
+    item.innerHTML = '<span class="sw" style="background:' + e.color + '"></span>' + e.label + " (" + e.pct + "%)";
+    legendEl.appendChild(item);
+  });
+
+  /* ---------- Copy buttons ---------- */
+  document.querySelectorAll(".copy-btn").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.getAttribute("data-copy") || "";
+      try {
+        navigator.clipboard.writeText(text).then(function () {
+          var orig = b.textContent;
+          b.textContent = "Copied";
+          window.setTimeout(function () { b.textContent = orig; }, 1400);
+        }).catch(function () {});
+      } catch (e) {}
+    });
+  });
+
+  /* ---------- Scroll reveal ---------- */
+  try {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in");
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+  } catch (e) {
+    document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+  }
+})();
+</script>
+</body>
+</html>
