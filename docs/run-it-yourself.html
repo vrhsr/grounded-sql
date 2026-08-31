@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Run it Yourself · Grounded SQL</title>
+<meta name="description" content="Clone Grounded SQL, get the Spider dataset and the fine-tuned adapter, and point the Gradio UI at your own database.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗄️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="brand"><span class="brand-mark">GS</span>Grounded SQL</a>
+    <nav class="links">
+      <a class="nav-link" href="index.html">Home</a>
+      <a class="nav-link" href="how-it-works.html">How it Works</a>
+      <a class="nav-link" href="how-it-works.html#results">Results</a>
+      <a class="nav-link active" href="run-it-yourself.html">Run it Yourself</a>
+    </nav>
+    <div class="nav-ctas">
+      <a class="btn btn-ghost btn-sm" href="https://huggingface.co/mvrhsr/grounded-sql-mistral-7b" target="_blank" rel="noopener">Hugging Face</a>
+      <a class="btn btn-primary btn-sm" href="https://github.com/vrhsr/grounded-sql" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="page-kicker"><a href="index.html">Grounded SQL</a> / Run it Yourself</p>
+    <div class="page-header">
+      <div class="accent-rule"></div>
+      <p class="eyebrow">bring your own data</p>
+      <h1>Run it yourself, on your own database</h1>
+      <p class="lede">Everything on this site runs from the public repo below. Clone it, get the data and the adapter, and point the Gradio UI at your own schema instead of the demo's.</p>
+    </div>
+  </div>
+
+  <section class="tight">
+    <div class="wrap-narrow">
+      <div class="prereq reveal">
+        <h4>Before you start</h4>
+        <ul>
+          <li>Python 3.10+ and <code>pip install -r requirements.txt</code></li>
+          <li>An NVIDIA GPU for fine-tuning (QLoRA's 4-bit quantization fits on a single consumer GPU); inference falls back to CPU automatically if no CUDA device is found</li>
+          <li>~7GB free for the INT8-quantized model at serve time, more if you train your own adapter</li>
+        </ul>
+      </div>
+
+      <div class="steps reveal">
+        <div class="step">
+          <div class="num">1</div>
+          <div class="step-body">
+            <h3>Clone the repo</h3>
+            <p>Full source: data pipeline, training, retrieval, evaluation, and serving.</p>
+            <div class="step-links"><a class="ext-link" href="https://github.com/vrhsr/grounded-sql" target="_blank" rel="noopener">github.com/vrhsr/grounded-sql ↗</a></div>
+            <div class="code-block">git clone https://github.com/vrhsr/grounded-sql.git
+<span class="cm">cd</span> grounded-sql
+pip install -r requirements.txt<button class="copy-btn" data-copy="git clone https://github.com/vrhsr/grounded-sql.git&#10;cd grounded-sql&#10;pip install -r requirements.txt">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">2</div>
+          <div class="step-body">
+            <h3>Download the dataset</h3>
+            <p>Training used the Spider benchmark: 8,659 question/SQL pairs across 166 databases. Grab the official release, or bring your own <span class="mono">.sqlite</span> files and schema.</p>
+            <div class="step-links"><a class="ext-link" href="https://yale-lily.github.io/spider" target="_blank" rel="noopener">Spider dataset ↗</a></div>
+            <div class="code-block"><span class="cm"># after placing Spider under dataset/spider/</span>
+python data_pipeline.py --config training/config.yaml<button class="copy-btn" data-copy="python data_pipeline.py --config training/config.yaml">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">3</div>
+          <div class="step-body">
+            <h3>Get the model</h3>
+            <p>Download the fine-tuned LoRA adapter directly, or train your own overnight run from scratch on a single GPU.</p>
+            <div class="step-links"><a class="ext-link" href="https://huggingface.co/mvrhsr/grounded-sql-mistral-7b" target="_blank" rel="noopener">Adapter on Hugging Face ↗</a></div>
+            <div class="code-block">python training/train.py --config training/ablations/rank_64_v2.yaml<button class="copy-btn" data-copy="python training/train.py --config training/ablations/rank_64_v2.yaml">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">4</div>
+          <div class="step-body">
+            <h3>Serve it</h3>
+            <p>Redis-cached FastAPI backend, GPU-enabled via Docker Compose, or run the API directly.</p>
+            <div class="code-block">docker-compose up
+<span class="cm"># or, without Docker:</span>
+MODEL_ADAPTER_PATH=checkpoints/rank_64/final_adapter \
+uvicorn serving.main:app --host 0.0.0.0 --port 8000<button class="copy-btn" data-copy="docker-compose up">Copy</button></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">5</div>
+          <div class="step-body">
+            <h3>Ask it anything</h3>
+            <p>Launch the Gradio UI, paste your own schema (or upload your own <span class="mono">.sqlite</span> file) instead of the demo databases, and ask questions about your own data in plain English.</p>
+            <div class="code-block">python app.py
+<span class="cm"># → opens at localhost:7860</span><button class="copy-btn" data-copy="python app.py">Copy</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tight">
+    <div class="wrap">
+      <div class="teaser-grid reveal" style="grid-template-columns: 1fr 1fr;">
+        <a class="teaser-card" href="how-it-works.html">
+          <span class="t-idx">← back</span>
+          <h3>How it works</h3>
+          <p>The four-stage pipeline and the design decisions behind it, with the benchmark numbers that justify them.</p>
+          <span class="go">Read the architecture →</span>
+        </a>
+        <a class="teaser-card" href="index.html#demo">
+          <span class="t-idx">try it first</span>
+          <h3>Live demo</h3>
+          <p>See it work against a real database before you set anything up locally.</p>
+          <span class="go">Open the demo →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <a href="index.html" class="brand"><span class="brand-mark">GS</span>Grounded SQL</a>
+          <p style="margin-top:0.9rem;">Fine-tuned Mistral-7B for text-to-SQL, grounded by hybrid retrieval and verified by actually executing every query.</p>
+          <div class="stack-chips">
+            <span class="schip">Mistral-7B</span>
+            <span class="schip">PEFT / LoRA</span>
+            <span class="schip">FAISS</span>
+            <span class="schip">FastAPI</span>
+            <span class="schip">Redis</span>
+          </div>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="index.html#demo">Live demo</a></li>
+            <li><a href="how-it-works.html">How it works</a></li>
+            <li><a href="how-it-works.html#results">Results</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Build</h5>
+          <ul>
+            <li><a href="run-it-yourself.html">Run it yourself</a></li>
+            <li><a href="https://github.com/vrhsr/grounded-sql" target="_blank" rel="noopener">GitHub repository ↗</a></li>
+            <li><a href="https://huggingface.co/mvrhsr/grounded-sql-mistral-7b" target="_blank" rel="noopener">Model on Hugging Face ↗</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Resources</h5>
+          <ul>
+            <li><a href="https://yale-lily.github.io/spider" target="_blank" rel="noopener">Spider dataset ↗</a></li>
+            <li><a href="https://wandb.ai/mvrhsr-/text-to-sql-finetune/runs/kww42yro" target="_blank" rel="noopener">Training run on W&amp;B ↗</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>Grounded SQL: fine-tuned text-to-SQL, verified by execution.</span>
+        <span class="mono">mvrhsr/grounded-sql-mistral-7b</span>
+      </div>
+    </div>
+  </footer>
+</main>
+
+<script src="assets/common.js"></script>
+</body>
+</html>

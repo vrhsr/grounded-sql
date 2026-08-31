@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How it Works · Grounded SQL</title>
+<meta name="description" content="The four-stage pipeline behind Grounded SQL, the design decisions behind it, and the four-way benchmark that backs them up.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗄️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="brand"><span class="brand-mark">GS</span>Grounded SQL</a>
+    <nav class="links">
+      <a class="nav-link" href="index.html">Home</a>
+      <a class="nav-link active" href="how-it-works.html">How it Works</a>
+      <a class="nav-link" href="how-it-works.html#results">Results</a>
+      <a class="nav-link" href="run-it-yourself.html">Run it Yourself</a>
+    </nav>
+    <div class="nav-ctas">
+      <a class="btn btn-ghost btn-sm" href="https://huggingface.co/mvrhsr/grounded-sql-mistral-7b" target="_blank" rel="noopener">Hugging Face</a>
+      <a class="btn btn-primary btn-sm" href="https://github.com/vrhsr/grounded-sql" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="page-kicker"><a href="index.html">Grounded SQL</a> / How it Works</p>
+    <div class="page-header">
+      <div class="accent-rule"></div>
+      <p class="eyebrow">architecture &amp; results</p>
+      <h1>How a question becomes a verified answer</h1>
+      <p class="lede">Four stages sit between a plain-English question and SQL you can trust, and every design choice along the way was made for a specific, measurable reason. Here's the full path, and the benchmark numbers that back it up.</p>
+    </div>
+  </div>
+
+  <section class="tight">
+    <div class="wrap">
+      <p class="eyebrow reveal">the pipeline</p>
+      <h2 class="reveal">Nothing gets executed on faith</h2>
+      <p class="section-lede reveal">The schema is narrowed before generation, and the SQL is proven correct by running it, never by how it looks.</p>
+      <div class="pipeline reveal">
+        <div class="stage">
+          <span class="idx">01</span>
+          <h3>Ask</h3>
+          <p>A question in plain English, plus the target database, typed in, or a schema/<span class="mono">.sqlite</span> file you provide yourself.</p>
+          <span class="file">app.py</span>
+          <div class="detail">Formatted as a Mistral instruction: <br><span class="cm">[INST] {system_prompt}</span><br><span class="cm">Database Schema: {schema}</span><br><span class="cm">Question: {question} [/INST]</span></div>
+          <span class="stage-arrow">→</span>
+        </div>
+        <div class="stage">
+          <span class="idx">02</span>
+          <h3>Hybrid retrieval</h3>
+          <p>BM25 (exact column names) and FAISS (semantic meaning) each rank the schema's tables, fused so only relevant tables reach the model.</p>
+          <span class="file">retrieval/hybrid_linker.py</span>
+          <div class="detail">Reciprocal Rank Fusion, k=60:<br><span class="cm">score(t) = Σ 1 / (60 + rank_i(t))</span><br>summed across the BM25 and FAISS rankings.</div>
+          <span class="stage-arrow">→</span>
+        </div>
+        <div class="stage">
+          <span class="idx">03</span>
+          <h3>Fine-tuned generation</h3>
+          <p>Mistral-7B-Instruct-v0.2 + a QLoRA adapter writes the SQL, served INT8-quantized and cached in Redis by question+schema hash.</p>
+          <span class="file">serving/model_loader.py</span>
+          <div class="detail"><span class="cm">r: 64  alpha: 128  dropout: 0.05</span><br><span class="cm">target: q/k/v/o_proj, gate/up/down_proj</span></div>
+          <span class="stage-arrow">→</span>
+        </div>
+        <div class="stage">
+          <span class="idx">04</span>
+          <h3>Execution check</h3>
+          <p>The SQL is actually run against SQLite. Correctness is measured by comparing the returned rows, never by how the query looks.</p>
+          <span class="file">evaluation/executor.py</span>
+          <div class="detail">Rows compared as order-insensitive sets: NULLs normalized, floats rounded to 4dp, strings lowercased.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tight band">
+    <div class="wrap">
+      <p class="eyebrow reveal">why it's built this way</p>
+      <h2 class="reveal">Five decisions that shaped the system</h2>
+      <p class="section-lede reveal">Each one traded simplicity for a measurable gain, not for its own sake.</p>
+      <div class="decisions reveal">
+        <div class="decision">
+          <span class="num">01</span>
+          <div>
+            <h4>Execution accuracy over string match</h4>
+            <p>Two SQL queries can look completely different and return identical rows. Only running them tells you if a query is actually correct.</p>
+          </div>
+        </div>
+        <div class="decision">
+          <span class="num">02</span>
+          <div>
+            <h4>BM25 alongside semantic search</h4>
+            <p>Dense retrieval finds "revenue" → <span class="mono">amount</span>, but misses exact identifiers. BM25 finds <span class="mono">customer_id</span> verbatim. Fusing both is what eliminated hallucinated columns entirely.</p>
+          </div>
+        </div>
+        <div class="decision">
+          <span class="num">03</span>
+          <div>
+            <h4>INT8 over 4-bit for serving</h4>
+            <p>SQL correctness is binary, not a matter of degree. A 3.1% accuracy drop from more aggressive quantization means roughly 32 more wrong queries on the 1,034-query test set, too costly for a two-and-a-half times throughput gain.</p>
+          </div>
+        </div>
+        <div class="decision">
+          <span class="num">04</span>
+          <div>
+            <h4>Loss masked to SQL tokens only</h4>
+            <p>Training loss is computed only on the generated SQL, not on the schema or question prefix, so the model learns to write SQL, not to predict the schema back.</p>
+          </div>
+        </div>
+        <div class="decision">
+          <span class="num">05</span>
+          <div>
+            <h4>Tanglish as a documented failure, not a hidden one</h4>
+            <p>The model breaks on Tamil-English code-switched questions, a schema-linking failure on Romanized words. Naming that precisely is more useful than pretending it doesn't happen.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="results" class="tight">
+    <div class="wrap">
+      <p class="eyebrow reveal">results</p>
+      <h2 class="reveal">Why fine-tuning wins on the 1,034-sample test set</h2>
+      <p class="section-lede reveal">Four systems, scored the same way: execute the generated SQL, compare its rows to the gold query's rows.</p>
+
+      <div class="bars reveal" id="bars"></div>
+
+      <div class="finding reveal"><strong>Non-obvious finding:</strong> on the 166 held-out schemas, adding retrieval to the fine-tuned model <em>hurt</em> accuracy (70.2%&nbsp;&rarr;&nbsp;66.4%). Cross-schema retrieval quality, not model capacity, is the real ceiling on generalization.</div>
+
+      <div class="mini-grid reveal">
+        <div class="mini-card">
+          <h4>LoRA rank ablation <span>training/ablations/</span></h4>
+          <table class="mini-table">
+            <thead><tr><th>Config</th><th>r</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>rank_8.yaml</td><td>8</td><td>underfits, plateaus early</td></tr>
+              <tr><td>config.yaml</td><td>16</td><td>66.2% exec. accuracy</td></tr>
+              <tr class="win"><td>rank_64_v2.yaml</td><td>64</td><td>70.2% exec. accuracy</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mini-card">
+          <h4>Quantization for serving <span>fp16 → int8 → gguf</span></h4>
+          <table class="mini-table">
+            <thead><tr><th>Format</th><th>Size</th><th>p95</th><th>Accuracy</th></tr></thead>
+            <tbody>
+              <tr><td>fp16</td><td>14GB</td><td>1.8s</td><td>baseline</td></tr>
+              <tr class="win"><td>INT8</td><td>7GB</td><td>0.8s</td><td>&minus;0.8%</td></tr>
+              <tr><td>GGUF Q4_K_M</td><td>4GB</td><td>0.5s</td><td>&minus;3.1%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mini-card">
+          <h4>Error taxonomy <span>fine-tuned model</span></h4>
+          <div class="stack-bar" id="error-stack"></div>
+          <div class="legend" id="error-legend"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tight">
+    <div class="wrap">
+      <div class="teaser-grid reveal" style="grid-template-columns: 1fr 1fr;">
+        <a class="teaser-card" href="index.html#demo">
+          <span class="t-idx">← back</span>
+          <h3>Try the live demo</h3>
+          <p>See these stages run against a real database, with a real generated query and real returned rows.</p>
+          <span class="go">Open the demo →</span>
+        </a>
+        <a class="teaser-card" href="run-it-yourself.html">
+          <span class="t-idx">next →</span>
+          <h3>Run it yourself</h3>
+          <p>Clone the repo, get the data and the adapter, and point it at your own database.</p>
+          <span class="go">Get started →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <a href="index.html" class="brand"><span class="brand-mark">GS</span>Grounded SQL</a>
+          <p style="margin-top:0.9rem;">Fine-tuned Mistral-7B for text-to-SQL, grounded by hybrid retrieval and verified by actually executing every query.</p>
+          <div class="stack-chips">
+            <span class="schip">Mistral-7B</span>
+            <span class="schip">PEFT / LoRA</span>
+            <span class="schip">FAISS</span>
+            <span class="schip">FastAPI</span>
+            <span class="schip">Redis</span>
+          </div>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="index.html#demo">Live demo</a></li>
+            <li><a href="how-it-works.html">How it works</a></li>
+            <li><a href="how-it-works.html#results">Results</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Build</h5>
+          <ul>
+            <li><a href="run-it-yourself.html">Run it yourself</a></li>
+            <li><a href="https://github.com/vrhsr/grounded-sql" target="_blank" rel="noopener">GitHub repository ↗</a></li>
+            <li><a href="https://huggingface.co/mvrhsr/grounded-sql-mistral-7b" target="_blank" rel="noopener">Model on Hugging Face ↗</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Resources</h5>
+          <ul>
+            <li><a href="https://yale-lily.github.io/spider" target="_blank" rel="noopener">Spider dataset ↗</a></li>
+            <li><a href="https://wandb.ai/mvrhsr-/text-to-sql-finetune/runs/kww42yro" target="_blank" rel="noopener">Training run on W&amp;B ↗</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>Grounded SQL: fine-tuned text-to-SQL, verified by execution.</span>
+        <span class="mono">mvrhsr/grounded-sql-mistral-7b</span>
+      </div>
+    </div>
+  </footer>
+</main>
+
+<script src="assets/charts.js"></script>
+<script src="assets/common.js"></script>
+</body>
+</html>
